@@ -1,4 +1,3 @@
-![1_a0I73CDAqYGI5fCfwsdOyg](https://user-images.githubusercontent.com/19760320/233184662-e45add33-8107-45f2-908f-2d8bf3a5416a.png)
 
 
 # Getting started
@@ -32,3 +31,6 @@ Start the local development server
  Start the tinker terminal
 
     php artisan tinker
+    
+ ![1_a0I73CDAqYGI5fCfwsdOyg](https://user-images.githubusercontent.com/19760320/233184662-e45add33-8107-45f2-908f-2d8bf3a5416a.png)
+
