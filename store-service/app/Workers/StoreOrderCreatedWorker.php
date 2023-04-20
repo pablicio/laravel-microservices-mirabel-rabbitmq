@@ -13,7 +13,7 @@ class StoreOrderCreatedWorker
       'store-services.order.created'
     ],
     options = [
-      'type' => 'topic'
+      'exchange_type' => 'topic'
     ],
     retry_options = [
       'x-message-ttl' => 3600,

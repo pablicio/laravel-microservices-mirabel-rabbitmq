@@ -14,7 +14,7 @@ class TestOrderDoneWorker
       'order-services.order.received'
     ],
     options = [
-      'type' => 'topic',
+      'exchange_type' => 'topic',
       'queue_durable' => true,
       'exchange_durable' => true
     ],
