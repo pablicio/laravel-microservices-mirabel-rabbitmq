@@ -19,9 +19,20 @@ final class RabbitMqMetrics
 
     public function record(string $event): void
     {
-        $metrics = $this->read();
-        $metrics[$event] = ($metrics[$event] ?? 0) + 1;
-        $this->write($metrics);
+        $this->recordMany($event, 1);
+    }
+
+    public function recordMany(string $event, int $amount): void
+    {
+        if ($amount < 1) {
+            return;
+        }
+
+        $this->updateLocked(function (array $metrics) use ($event, $amount): array {
+            $metrics[$event] = ($metrics[$event] ?? 0) + $amount;
+
+            return $metrics;
+        });
     }
 
     public function reset(): void
@@ -64,7 +75,36 @@ final class RabbitMqMetrics
             mkdir($directory, 0775, true);
         }
 
-        file_put_contents($path, json_encode($metrics, JSON_THROW_ON_ERROR), LOCK_EX);
+        $handle = fopen($path, 'c+');
+        flock($handle, LOCK_EX);
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($metrics, JSON_THROW_ON_ERROR));
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+
+    private function updateLocked(callable $update): void
+    {
+        $path = $this->path();
+        $directory = dirname($path);
+        if (!is_dir($directory)) {
+            mkdir($directory, 0775, true);
+        }
+
+        $handle = fopen($path, 'c+');
+        flock($handle, LOCK_EX);
+        rewind($handle);
+        $current = json_decode(stream_get_contents($handle) ?: '{}', true);
+        $metrics = is_array($current) ? array_intersect_key($current, array_flip(self::EVENTS)) : [];
+        $metrics = $update($metrics);
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($metrics, JSON_THROW_ON_ERROR));
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
     }
 
     private function path(): string

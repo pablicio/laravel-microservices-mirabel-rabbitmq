@@ -28,9 +28,11 @@ final class RabbitMqMetrics
             return;
         }
 
-        $metrics = $this->read();
-        $metrics[$event] = ($metrics[$event] ?? 0) + $amount;
-        $this->write($metrics);
+        $this->updateLocked(function (array $metrics) use ($event, $amount): array {
+            $metrics[$event] = ($metrics[$event] ?? 0) + $amount;
+
+            return $metrics;
+        });
     }
 
     public function reset(): void
@@ -101,6 +103,30 @@ final class RabbitMqMetrics
         return is_array($history) ? $history : [];
     }
 
+    public function consumerHistory(): array
+    {
+        $path = dirname($this->path()) . '/rabbitmq-consumer-history.json';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $history = json_decode((string) file_get_contents($path), true);
+
+        return is_array($history) ? $history : [];
+    }
+
+    public function saveConsumerRun(array $run): void
+    {
+        $path = dirname($this->path()) . '/rabbitmq-consumer-history.json';
+        $history = $this->consumerHistory();
+        if (collect($history)->contains('run_id', $run['run_id'] ?? null)) {
+            return;
+        }
+
+        array_unshift($history, $run);
+        file_put_contents($path, json_encode(array_slice($history, 0, 20), JSON_THROW_ON_ERROR), LOCK_EX);
+    }
+
     public function renderPrometheus(): string
     {
         $lines = [
@@ -136,7 +162,36 @@ final class RabbitMqMetrics
             mkdir($directory, 0775, true);
         }
 
-        file_put_contents($path, json_encode($metrics, JSON_THROW_ON_ERROR), LOCK_EX);
+        $handle = fopen($path, 'c+');
+        flock($handle, LOCK_EX);
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($metrics, JSON_THROW_ON_ERROR));
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+
+    private function updateLocked(callable $update): void
+    {
+        $path = $this->path();
+        $directory = dirname($path);
+        if (!is_dir($directory)) {
+            mkdir($directory, 0775, true);
+        }
+
+        $handle = fopen($path, 'c+');
+        flock($handle, LOCK_EX);
+        rewind($handle);
+        $current = json_decode(stream_get_contents($handle) ?: '{}', true);
+        $metrics = is_array($current) ? array_intersect_key($current, array_flip(self::EVENTS)) : [];
+        $metrics = $update($metrics);
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($metrics, JSON_THROW_ON_ERROR));
+        fflush($handle);
+        flock($handle, LOCK_UN);
+        fclose($handle);
     }
 
     private function path(): string

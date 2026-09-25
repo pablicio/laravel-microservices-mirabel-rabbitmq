@@ -44,10 +44,7 @@
 </head>
 <body>
 <main>
-    <nav>
-        <a href="{{ url('/') }}">← Message Lab</a>
-        <span><a href="{{ url('/applications-test') }}">Aplicações teste</a> · <a href="{{ url('/black-friday') }}">Black Friday Cart</a> · <a href="{{ url('/stress-test') }}">Stress Lab</a></span>
-    </nav>
+    @include('partials.lab-navigation')
     <div class="eyebrow">Mirabel / Black Friday 2026</div>
     <h1>Compre rápido.<br>Reserve certo.</h1>
     <p class="intro">Um carrinho de teste para um problema real de alta demanda: impedir que duas compras confirmem o mesmo estoque durante o pico da Black Friday.</p>

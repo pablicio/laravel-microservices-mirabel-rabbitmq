@@ -48,7 +48,7 @@
 </head>
 <body>
 <main>
-    <nav><a href="{{ url('/') }}">← Message Lab</a><span><a href="{{ url('/applications-test') }}">Aplicações teste</a> · <a href="{{ url('/black-friday') }}">Black Friday Cart</a> · <a href="{{ url('/production-readiness') }}">Production Gate</a></span></nav>
+    @include('partials.lab-navigation')
     <div class="eyebrow">Mirabel / Load boundary</div>
     <h1>Descubra onde a fila cede.</h1>
     <p class="intro">Uma pancada controlada de mensagens reais para medir o limite do publisher, da conexão e do broker. O teste roda em segundo plano para você acompanhar sem travar a interface.</p>

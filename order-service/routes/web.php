@@ -1,7 +1,9 @@
 <?php
 
+use App\Support\ConsumerPoolManager;
 use App\Support\RabbitMqMetrics;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -45,6 +47,111 @@ Route::get('/stress-test', function (RabbitMqMetrics $metrics) {
 
 Route::get('/production-readiness', function () {
     return view('production-readiness');
+});
+
+Route::get('/consumer-lab', function () {
+    return view('consumer-lab', ['history' => app(RabbitMqMetrics::class)->consumerHistory()]);
+});
+
+Route::post('/consumer-lab/start', function (Request $request) {
+    $data = $request->validate([
+        'messages' => ['required', 'integer', 'min:1', 'max:100000'],
+        'consumers' => ['required', 'integer', 'min:1', 'max:8'],
+    ]);
+    $runId = bin2hex(random_bytes(8));
+    $storeArtisan = realpath(base_path('../store-service/artisan'));
+    $php = PHP_BINARY;
+    try {
+        $storeMetrics = Http::timeout(1)->get('http://127.0.0.1:8000/rabbitmq/metrics')->body();
+    } catch (\Throwable) {
+        $storeMetrics = '';
+    }
+    $processedBaseline = 0;
+    if (preg_match('/rabbitmq_messages_total\{event="processed"\}\s+(\d+)/', $storeMetrics, $matches)) {
+        $processedBaseline = (int) $matches[1];
+    }
+
+    $queueUrl = 'http://127.0.0.1:15672/api/queues/%2F/store-services.orders.created';
+    $getActiveConsumers = static function () use ($queueUrl): ?int {
+        try {
+            $response = Http::withBasicAuth(
+                env('MB_RABBITMQ_USER', 'guest'),
+                env('MB_RABBITMQ_PASSWORD', 'guest'),
+            )->timeout(2)->get($queueUrl);
+            $count = $response->json('consumers');
+
+            return $response->successful() && is_numeric($count) ? (int) $count : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    };
+    $startWorker = static function () use ($php, $storeArtisan): void {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $command = sprintf('start /B "" "%s" "%s" rabbitmq:consume-store-orders > NUL 2>&1', $php, $storeArtisan);
+        } else {
+            $command = sprintf('"%s" "%s" rabbitmq:consume-store-orders > /dev/null 2>&1 &', $php, $storeArtisan);
+        }
+        pclose(popen($command, 'r'));
+    };
+
+    try {
+        app(ConsumerPoolManager::class)->reconcile((int) $data['consumers'], $storeArtisan, $getActiveConsumers, $startWorker);
+    } catch (\RuntimeException $exception) {
+        return back()->withErrors(['consumers' => $exception->getMessage()]);
+    }
+
+    $arguments = sprintf('rabbitmq:stress %d --users=%d --processed-baseline=%d --run-id=%s --consumers=%d', (int) $data['messages'], (int) $data['consumers'] * 100, $processedBaseline, $runId, (int) $data['consumers']);
+    $command = sprintf('start /B "" "%s" "%s" %s > NUL 2>&1', $php, base_path('artisan'), $arguments);
+    pclose(popen($command, 'r'));
+
+    return redirect('/consumer-lab')->with('consumer_run_id', $runId);
+});
+
+Route::get('/consumer-lab/status', function (Request $request, RabbitMqMetrics $metrics) {
+    $runId = (string) $request->query('run_id', '');
+    $publisher = $metrics->stress();
+    $processedTotal = 0;
+    $storeMetrics = Http::timeout(1)->get('http://127.0.0.1:8000/rabbitmq/metrics')->body();
+    if (preg_match('/rabbitmq_messages_total\{event="processed"\}\s+(\d+)/', $storeMetrics, $matches)) {
+        $processedTotal = (int) $matches[1];
+    }
+    $processedBaseline = (int) ($publisher['processed_baseline'] ?? 0);
+    $processed = max(0, $processedTotal - $processedBaseline);
+    $status = ($publisher['run_id'] ?? '') === $runId ? ($publisher['status'] ?? 'running') : 'queued';
+    try {
+        $queue = Http::withBasicAuth(
+            env('MB_RABBITMQ_USER', 'guest'),
+            env('MB_RABBITMQ_PASSWORD', 'guest'),
+        )->timeout(1)->get('http://127.0.0.1:15672/api/queues/%2F/store-services.orders.created')->json();
+    } catch (\Throwable) {
+        $queue = [];
+    }
+
+    $result = [
+        'run_id' => $runId,
+        'status' => $status,
+        'requested' => ($publisher['run_id'] ?? '') === $runId ? ($publisher['requested'] ?? 0) : 0,
+        'published' => ($publisher['run_id'] ?? '') === $runId ? ($publisher['published'] ?? 0) : 0,
+        'requested_consumers' => ($publisher['run_id'] ?? '') === $runId ? ($publisher['requested_consumers'] ?? 0) : 0,
+        'processed' => $processed,
+        'backlog' => (int) ($queue['messages'] ?? 0),
+        'consumers' => (int) ($queue['consumers'] ?? 0),
+        'elapsed_ms' => ($publisher['run_id'] ?? '') === $runId ? ($publisher['elapsed_ms'] ?? 0) : 0,
+        'consumer_elapsed_ms' => ($publisher['run_id'] ?? '') === $runId
+            ? max(0, (int) round(microtime(true) * 1000) - (int) ($publisher['started_at_ms'] ?? 0))
+            : 0,
+    ];
+    $result['difference'] = (int) $result['published'] - $processed;
+    if ($status === 'completed' && (int) $result['backlog'] === 0) {
+        $result['status'] = $processed === (int) $result['published'] ? 'completed' : 'incomplete';
+        $result['throughput'] = $result['status'] === 'completed' && (int) $result['consumer_elapsed_ms'] > 0
+            ? round($processed / ($result['consumer_elapsed_ms'] / 1000), 2)
+            : 0;
+        $result['completed_at'] = now()->toIso8601String();
+        $metrics->saveConsumerRun($result);
+    }
+
+    return response()->json($result);
 });
 
 Route::post('/production-readiness/evaluate', function (Request $request) {

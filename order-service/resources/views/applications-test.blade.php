@@ -41,10 +41,7 @@
 </head>
 <body>
 <main>
-    <nav>
-        <a href="{{ url('/') }}">← Message Lab</a>
-        <span><a class="tab" href="{{ url('/applications-test') }}">Aplicações teste</a> <a href="{{ url('/black-friday') }}">Black Friday Cart</a> · <a href="{{ url('/stress-test') }}">Stress Lab →</a></span>
-    </nav>
+    @include('partials.lab-navigation')
     <header>
         <div class="kicker">Mirabel / Resilience playground</div>
         <h1>Teste antes de quebrar em produção.</h1>

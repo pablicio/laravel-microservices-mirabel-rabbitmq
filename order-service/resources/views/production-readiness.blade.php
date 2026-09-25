@@ -26,7 +26,7 @@
 </head>
 <body>
 <main>
-    <nav><a href="{{ url('/') }}">← Message Lab</a><span><a href="{{ url('/stress-test') }}">Stress Lab</a> · <a href="{{ url('/black-friday') }}">Black Friday Cart</a></span></nav>
+    @include('partials.lab-navigation')
     <header><div class="eyebrow">Mirabel / Production gate</div><h1>Está pronto para produção?</h1><p class="intro">Monte um cenário parecido com o seu pico real e receba uma leitura simples: o que está saudável, o que falta testar e onde a fila pode crescer.</p></header>
     <div class="layout">
         <section>

@@ -2,6 +2,7 @@
 
 namespace App\Workers;
 
+use App\Support\RabbitMqMetrics;
 use Mirabel\RabbitMQ\Worker;
 
 class StoreOrderCreatedWorker extends Worker
@@ -21,10 +22,12 @@ class StoreOrderCreatedWorker extends Worker
   public function work($msg)
   {
     try {
-      print_r($msg->body);
+      app(RabbitMqMetrics::class)->record('processed');
 
       return $this->ack($msg);
     } catch (\Throwable $exception) {
+      app(RabbitMqMetrics::class)->record('message_retried');
+
       return $this->nack($msg);
     }
   }

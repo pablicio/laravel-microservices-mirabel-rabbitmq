@@ -43,12 +43,7 @@
 </head>
 <body>
 <main>
-    <nav style="display:flex; justify-content:flex-end; margin-bottom:24px; font:700 13px Arial, sans-serif;">
-        <a href="{{ url('/applications-test') }}" style="color:var(--green); text-decoration:none;">Aplicações teste</a> ·
-        <a href="{{ url('/black-friday') }}" style="color:var(--green); text-decoration:none;">Black Friday Cart</a> ·
-        <a href="{{ url('/stress-test') }}" style="color:var(--green); text-decoration:none;">Stress Lab</a> ·
-        <a href="{{ url('/production-readiness') }}" style="color:var(--green); text-decoration:none;">Production Gate →</a>
-    </nav>
+    @include('partials.lab-navigation')
     <header>
         <div>
             <div class="kicker">Mirabel / RabbitMQ</div>

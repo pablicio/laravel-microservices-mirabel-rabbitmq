@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use Tests\TestCase;
+use App\Support\ConsumerPoolManager;
+use App\Support\RabbitMqMetrics;
+use Illuminate\Support\Facades\Http;
 
 final class MessageLabTest extends TestCase
 {
@@ -92,5 +95,179 @@ final class MessageLabTest extends TestCase
             ])
             ->assertRedirect('/production-readiness')
             ->assertSessionHas('readiness');
+    }
+
+    public function testConsumerLabPageIsAvailable(): void
+    {
+        $this->get('/consumer-lab')
+            ->assertOk()
+            ->assertSee('Publique. Consuma. Meça.');
+    }
+
+    public function testConsumerLabStatusReturnsQueueFields(): void
+    {
+        $this->getJson('/consumer-lab/status?run_id=missing-run')
+            ->assertOk()
+            ->assertJsonStructure(['status', 'requested', 'published', 'processed', 'backlog', 'consumers']);
+    }
+
+    public function testConsumerHistoryIsAvailable(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-history-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveConsumerRun([
+            'run_id' => bin2hex(random_bytes(8)),
+            'published' => 100,
+            'processed' => 100,
+            'requested_consumers' => 2,
+            'consumers' => 2,
+            'consumer_elapsed_ms' => 5000,
+            'throughput' => 20,
+            'completed_at' => '2026-09-25T12:00:00+00:00',
+            'backlog' => 0,
+        ]);
+        $metrics->saveConsumerRun([
+            'run_id' => bin2hex(random_bytes(8)),
+            'status' => 'incomplete',
+            'published' => 1000,
+            'processed' => 789,
+            'requested_consumers' => 1,
+            'consumers' => 20,
+            'consumer_elapsed_ms' => 1980,
+            'throughput' => 399.29,
+            'completed_at' => '2026-09-25T18:37:00+00:00',
+            'backlog' => 0,
+        ]);
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+
+        $this->get('/consumer-lab')
+            ->assertOk()
+            ->assertSee('Fila em tempo real')
+            ->assertSee('Situação')
+            ->assertSee('Incompleto')
+            ->assertSee('211')
+            ->assertSee('1 / 20')
+            ->assertDontSee('399,29');
+    }
+
+    public function testLabPagesShareNavigationAndMarkTheCurrentPage(): void
+    {
+        $pages = [
+            '/' => 'Message Lab',
+            '/applications-test' => 'Applications Test',
+            '/black-friday' => 'Black Friday',
+            '/stress-test' => 'Stress Test',
+            '/consumer-lab' => 'Consumer Lab',
+            '/production-readiness' => 'Production Gate',
+        ];
+
+        foreach ($pages as $currentPath => $currentLabel) {
+            $response = $this->get($currentPath)->assertOk();
+            foreach ($pages as $path => $label) {
+                $response->assertSee($label)
+                    ->assertSee('href="' . url($path) . '"', false);
+            }
+
+            $response->assertSee('aria-current="page"', false);
+            $this->assertSame(1, substr_count($response->getContent(), 'aria-current="page"'), $currentLabel);
+        }
+    }
+
+    public function testConsumerRunWithUnaccountedMessagesIsMarkedIncomplete(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-status-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveStress([
+            'run_id' => 'partial-consumer-run-' . bin2hex(random_bytes(4)),
+            'status' => 'completed',
+            'requested' => 1000,
+            'published' => 1000,
+            'requested_consumers' => 1,
+            'processed_baseline' => 100,
+            'started_at_ms' => (int) (microtime(true) * 1000) - 2000,
+        ]);
+        $runId = $metrics->stress()['run_id'];
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+
+        Http::fake([
+            'http://127.0.0.1:8000/rabbitmq/metrics' => Http::response(
+                'rabbitmq_messages_total{event="processed"} 889' . "\n",
+            ),
+            'http://127.0.0.1:15672/api/queues/*' => Http::response([
+                'messages' => 0,
+                'consumers' => 20,
+            ]),
+        ]);
+
+        $this->getJson('/consumer-lab/status?run_id=' . $runId)
+            ->assertOk()
+            ->assertJsonPath('status', 'incomplete')
+            ->assertJsonPath('published', 1000)
+            ->assertJsonPath('processed', 789)
+            ->assertJsonPath('difference', 211)
+            ->assertJsonPath('requested_consumers', 1)
+            ->assertJsonPath('throughput', 0);
+
+        $this->assertSame('incomplete', $metrics->consumerHistory()[0]['status']);
+    }
+
+    public function testConsumerPoolManagerStopsOnlyTheExcessWorkers(): void
+    {
+        $manager = new class extends ConsumerPoolManager {
+            public array $stoppedPids = [];
+
+            protected function workerProcessIds(string $artisanPath): array
+            {
+                return range(1000, 1032);
+            }
+
+            protected function stopWorker(int $pid): bool
+            {
+                $this->stoppedPids[] = $pid;
+
+                return true;
+            }
+        };
+        $activeCounts = [33, 1];
+        $startCalls = 0;
+
+        $active = $manager->reconcile(
+            1,
+            'store-service/artisan',
+            static function () use (&$activeCounts): int {
+                return array_shift($activeCounts);
+            },
+            static function () use (&$startCalls): void {
+                $startCalls++;
+            },
+        );
+
+        $this->assertSame(1, $active);
+        $this->assertCount(32, $manager->stoppedPids);
+        $this->assertSame(0, $startCalls);
+    }
+
+    public function testConsumerPoolManagerStartsOnlyMissingWorkers(): void
+    {
+        $manager = new class extends ConsumerPoolManager {
+            protected function workerProcessIds(string $artisanPath): array
+            {
+                return [];
+            }
+        };
+        $activeCounts = [2, 4];
+        $startCalls = 0;
+
+        $active = $manager->reconcile(
+            4,
+            'store-service/artisan',
+            static function () use (&$activeCounts): int {
+                return array_shift($activeCounts);
+            },
+            static function () use (&$startCalls): void {
+                $startCalls++;
+            },
+        );
+
+        $this->assertSame(4, $active);
+        $this->assertSame(2, $startCalls);
     }
 }
