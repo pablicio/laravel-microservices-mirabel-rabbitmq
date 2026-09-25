@@ -2,12 +2,10 @@
 
 namespace App\Workers;
 
-use Pablicio\MirabelRabbitmq\RabbitMQWorkersConnection;
+use Mirabel\RabbitMQ\Worker;
 
-class TestOrderDoneWorker
+class TestOrderDoneWorker extends Worker
 {
-  use RabbitMQWorkersConnection;
-
   const QUEUE = 'order-services.order-test.done',
     routing_keys = [
       'test-service.order.done',
@@ -29,8 +27,7 @@ class TestOrderDoneWorker
       print_r($msg->body . "\n");
 
       return $this->ack($msg);
-    } catch (\Exception $e) {
-
+    } catch (\Throwable $exception) {
       return $this->nack($msg);
     }
   }

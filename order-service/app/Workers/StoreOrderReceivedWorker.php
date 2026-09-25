@@ -2,12 +2,10 @@
 
 namespace App\Workers;
 
-use Pablicio\MirabelRabbitmq\RabbitMQWorkersConnection;
+use Mirabel\RabbitMQ\Worker;
 
-class StoreOrderReceivedWorker
+class StoreOrderReceivedWorker extends Worker
 {
-  use RabbitMQWorkersConnection;
-
   const QUEUE = 'store-services.orders.received',
     routing_keys = [
       'order-services.order.received'
@@ -23,13 +21,14 @@ class StoreOrderReceivedWorker
   public function work($msg)
   {
     try {
-      if ($msg->body == 'test') {
-        throw new \Exception("Error Processing Request", 1);
+      if ($msg->body === 'test') {
+        throw new \RuntimeException('Error Processing Request');
       }
+
       print_r("Deu bom" . $msg->body . "\n");
 
       return $this->ack($msg);
-    } catch (\Exception $e) {
+    } catch (\Throwable $exception) {
       print_r("Deu erro" . $msg->body . "\n");
 
       return $this->nack($msg);

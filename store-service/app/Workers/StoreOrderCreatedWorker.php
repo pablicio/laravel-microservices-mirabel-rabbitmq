@@ -2,12 +2,10 @@
 
 namespace App\Workers;
 
-use Pablicio\MirabelRabbitmq\RabbitMQWorkersConnection;
+use Mirabel\RabbitMQ\Worker;
 
-class StoreOrderCreatedWorker
+class StoreOrderCreatedWorker extends Worker
 {
-  use RabbitMQWorkersConnection;
-
   const QUEUE = 'store-services.orders.created',
     routing_keys = [
       'store-services.order.created'
@@ -26,8 +24,7 @@ class StoreOrderCreatedWorker
       print_r($msg->body);
 
       return $this->ack($msg);
-    } catch (\Exception $e) {
-
+    } catch (\Throwable $exception) {
       return $this->nack($msg);
     }
   }

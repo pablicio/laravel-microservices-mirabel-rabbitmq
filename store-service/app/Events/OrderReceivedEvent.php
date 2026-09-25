@@ -2,17 +2,11 @@
 
 namespace App\Events;
 
-use Pablicio\MirabelRabbitmq\RabbitMQEventsConnection;
+use Mirabel\RabbitMQ\Event;
 
-class OrderReceivedEvent
+class OrderReceivedEvent extends Event
 {
-  use RabbitMQEventsConnection;
+  public static string $routingKey = 'order-services.order.received';
 
-  const ROUTING_KEY = 'order-services.order.received';
-
-  function __construct($payload)
-  {
-    $this->routingKey = self::ROUTING_KEY;
-    $this->payload = $payload;
-  }
+  public function __construct(public mixed $payload) {}
 }
