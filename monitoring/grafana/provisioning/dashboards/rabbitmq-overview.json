@@ -1,0 +1,33 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Published and processed per second",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"refId": "A", "expr": "rate(rabbitmq_messages_total{event=\"published\"}[1m])", "legendFormat": "published"},
+        {"refId": "B", "expr": "rate(rabbitmq_messages_total{event=\"processed\"}[1m])", "legendFormat": "processed"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Retries and error queue",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"refId": "A", "expr": "rate(rabbitmq_messages_total{event=\"message_retried\"}[1m])", "legendFormat": "retried"},
+        {"refId": "B", "expr": "rate(rabbitmq_messages_total{event=\"message_sent_to_error_queue\"}[1m])", "legendFormat": "error queue"}
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["rabbitmq", "mirabel"],
+  "time": {"from": "now-15m", "to": "now"},
+  "title": "Mirabel RabbitMQ Overview",
+  "uid": "mirabel-rabbitmq-overview",
+  "version": 1
+}

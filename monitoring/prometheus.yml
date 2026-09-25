@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: store-service
+    metrics_path: /rabbitmq/metrics
+    static_configs:
+      - targets: [host.docker.internal:8000]
+
+  - job_name: order-service
+    metrics_path: /rabbitmq/metrics
+    static_configs:
+      - targets: [host.docker.internal:8001]

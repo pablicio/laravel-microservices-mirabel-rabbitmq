@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\RabbitMqMetrics;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -15,4 +16,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+Route::get('/rabbitmq/metrics', function (RabbitMqMetrics $metrics) {
+    return response($metrics->renderPrometheus(), 200, [
+        'Content-Type' => 'text/plain; version=0.0.4',
+    ]);
 });
