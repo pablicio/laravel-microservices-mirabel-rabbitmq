@@ -7,6 +7,4 @@ use Mirabel\RabbitMQ\Event;
 class OrderReceivedEvent extends Event
 {
   public static string $routingKey = 'order-services.order.received';
-
-  public function __construct(public mixed $payload) {}
 }

@@ -43,26 +43,32 @@
 <main>
     @include('partials.lab-navigation')
     <header>
-        <div class="kicker">Mirabel / Resilience playground</div>
+        <div class="kicker">Mirabel / Resiliência</div>
         <h1>Teste antes de quebrar em produção.</h1>
         <p class="intro">Uma simulação controlada para descobrir como seus pedidos se comportam diante de falhas transitórias, mensagens duplicadas e limite de tentativas.</p>
     </header>
+    @include('partials.lab-guide', [
+        'title' => 'Retries e idempotência',
+        'concept' => 'Uma falha transitória pode justificar nova tentativa; uma chave idempotente evita repetir um efeito já aplicado.',
+        'observe' => 'Retries contam tentativas adicionais. Falhas persistentes vão para error queue; duplicatas simuladas são descartadas.',
+        'limit' => 'É uma simulação probabilística local: não publica no RabbitMQ, não espera TTL e não executa armazenamento idempotente real.',
+    ])
 
     <div class="lab">
         <section>
-            <h2>Scenario</h2>
-            <p class="why">A simulação não publica no RabbitMQ. Ela executa a mesma decisão operacional: processar, tentar novamente ou enviar para a error queue.</p>
+            <h2>Cenário</h2>
+            <p class="why">A simulação aplica decisões de processamento, retry, descarte de duplicata e envio para a error queue.</p>
             <form method="POST" action="{{ url('/applications-test/simulate') }}">
                 @csrf
-                <label for="quantity">Orders</label>
+                <label for="quantity">Pedidos</label>
                 <input id="quantity" name="quantity" type="number" min="1" max="1000" value="100" required>
-                <label for="failure_rate">Transient failure rate (%)</label>
+                <label for="failure_rate">Falha por tentativa (%)</label>
                 <input id="failure_rate" name="failure_rate" type="number" min="0" max="100" step="0.1" value="18" required>
-                <label for="duplicate_rate">Duplicate rate (%)</label>
+                <label for="duplicate_rate">Duplicatas recebidas (%)</label>
                 <input id="duplicate_rate" name="duplicate_rate" type="number" min="0" max="100" step="0.1" value="6" required>
-                <label for="max_attempts">Maximum attempts</label>
+                <label for="max_attempts">Máximo de tentativas</label>
                 <input id="max_attempts" name="max_attempts" type="number" min="1" max="5" value="3" required>
-                <button type="submit">Run simulation</button>
+                <button type="submit">Simular cenário</button>
             </form>
             @if ($errors->any())
                 <div class="result">{{ $errors->first() }}</div>
@@ -70,28 +76,28 @@
         </section>
 
         <section>
-            <h2>Decision surface</h2>
+            <h2>Resultados da simulação</h2>
             @if (session('simulation'))
                 @php($simulation = session('simulation'))
-                <p class="result">Simulation finished: <strong>{{ $simulation['quantity'] }} orders evaluated</strong> with {{ $simulation['max_attempts'] }} maximum attempts.</p>
+                <p class="result">Cenário concluído: <strong>{{ $simulation['quantity'] }} pedidos</strong>, com até {{ $simulation['max_attempts'] }} tentativas por pedido.</p>
                 <div class="stats">
-                    <div class="stat"><span>Processed</span><strong>{{ $simulation['summary']['processed'] }}</strong></div>
-                    <div class="stat"><span>Retries</span><strong>{{ $simulation['summary']['retried'] }}</strong></div>
-                    <div class="stat"><span>Duplicates</span><strong>{{ $simulation['summary']['duplicates'] }}</strong></div>
-                    <div class="stat"><span>Error queue</span><strong>{{ $simulation['summary']['error_queue'] }}</strong></div>
+                    <div class="stat"><span>Processados</span><strong>{{ $simulation['summary']['processed'] }}</strong></div>
+                    <div class="stat"><span>Tentativas adicionais</span><strong>{{ $simulation['summary']['retried'] }}</strong></div>
+                    <div class="stat"><span>Duplicatas descartadas</span><strong>{{ $simulation['summary']['duplicates'] }}</strong></div>
+                    <div class="stat"><span>Na error queue</span><strong>{{ $simulation['summary']['error_queue'] }}</strong></div>
                 </div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Order</th><th>Attempts</th><th>Outcome</th></tr></thead>
+                        <thead><tr><th>Pedido</th><th>Tentativas</th><th>Resultado</th></tr></thead>
                         <tbody>
                         @foreach ($simulation['sample'] as $order)
-                            <tr><td>{{ $order['order_id'] }}</td><td>{{ $order['attempts'] ?: 'deduped' }}</td><td class="outcome {{ $order['outcome'] }}">{{ $order['outcome'] }}</td></tr>
+                            <tr><td>{{ $order['order_id'] }}</td><td>{{ $order['attempts'] ?: 'sem processamento' }}</td><td class="outcome {{ $order['outcome'] }}">{{ ['processed' => 'processado', 'duplicate' => 'duplicata descartada', 'error_queue' => 'enviado à error queue'][$order['outcome']] }}</td></tr>
                         @endforeach
                         </tbody>
                     </table>
                 </div>
             @else
-                <p class="why">Configure a scenario on the left and run it to see where the traffic ends up. This makes retry and idempotency behavior visible before connecting a real consumer.</p>
+                <p class="why">Altere as probabilidades e repita a simulação. Falhas são sorteadas em cada tentativa; mais tentativas podem reduzir a error queue, mas aumentam o trabalho de retry.</p>
             @endif
         </section>
     </div>

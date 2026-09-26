@@ -11,7 +11,7 @@ final class MessageLabTest extends TestCase
 {
     public function testMessageLabIsAvailable(): void
     {
-        $this->get('/')->assertOk()->assertSee('Message lab');
+        $this->get('/')->assertOk()->assertSee('Eventos reais.');
     }
 
     public function testMessageQuantityMustBeWithinTheSupportedRange(): void
@@ -65,6 +65,17 @@ final class MessageLabTest extends TestCase
             ->assertJsonPath('blocked.0.available', 2);
     }
 
+    public function testBlackFridayShowsOversellingWithoutAtomicReservation(): void
+    {
+        $this->postJson('/black-friday/checkout', [
+            'items' => ['camera' => 2],
+        ])->assertOk()
+            ->assertJsonPath('contention.0.uncoordinated_total', 4)
+            ->assertJsonPath('contention.0.oversold', 2)
+            ->assertJsonPath('contention.0.atomic_approved_orders', 1)
+            ->assertJsonPath('contention.0.remaining_stock', 0);
+    }
+
     public function testStressTestCapsTheRequestedVolume(): void
     {
         $this->from('/stress-test')
@@ -116,6 +127,7 @@ final class MessageLabTest extends TestCase
         $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-history-' . bin2hex(random_bytes(6)) . '.json'));
         $metrics->saveConsumerRun([
             'run_id' => bin2hex(random_bytes(8)),
+            'measurement' => 'queue_ack_v1',
             'published' => 100,
             'processed' => 100,
             'requested_consumers' => 2,
@@ -127,6 +139,7 @@ final class MessageLabTest extends TestCase
         ]);
         $metrics->saveConsumerRun([
             'run_id' => bin2hex(random_bytes(8)),
+            'measurement' => 'queue_ack_v1',
             'status' => 'incomplete',
             'published' => 1000,
             'processed' => 789,
@@ -141,7 +154,7 @@ final class MessageLabTest extends TestCase
 
         $this->get('/consumer-lab')
             ->assertOk()
-            ->assertSee('Fila em tempo real')
+            ->assertSee('Execução atual')
             ->assertSee('Situação')
             ->assertSee('Incompleto')
             ->assertSee('211')
@@ -149,19 +162,39 @@ final class MessageLabTest extends TestCase
             ->assertDontSee('399,29');
     }
 
+    public function testLegacyConsumerHistoryIsMarkedAsUnverified(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-legacy-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveConsumerRun([
+            'run_id' => 'legacy-consumer-run',
+            'status' => 'incomplete',
+            'published' => 1000,
+            'processed' => 0,
+            'throughput' => 0,
+            'backlog' => 0,
+        ]);
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+
+        $this->get('/consumer-lab')
+            ->assertOk()
+            ->assertSee('Medição anterior')
+            ->assertSee('Execuções anteriores não registravam acks do broker');
+    }
+
     public function testLabPagesShareNavigationAndMarkTheCurrentPage(): void
     {
         $pages = [
-            '/' => 'Message Lab',
-            '/applications-test' => 'Applications Test',
-            '/black-friday' => 'Black Friday',
-            '/stress-test' => 'Stress Test',
-            '/consumer-lab' => 'Consumer Lab',
-            '/production-readiness' => 'Production Gate',
+            '/' => 'Eventos',
+            '/applications-test' => 'Resiliência',
+            '/black-friday' => 'Estoque',
+            '/stress-test' => 'Carga do publisher',
+            '/consumer-lab' => 'Consumers',
+            '/production-readiness' => 'Prontidão',
         ];
 
         foreach ($pages as $currentPath => $currentLabel) {
             $response = $this->get($currentPath)->assertOk();
+            $response->assertSee('O que este lab ensina');
             foreach ($pages as $path => $label) {
                 $response->assertSee($label)
                     ->assertSee('href="' . url($path) . '"', false);
@@ -181,32 +214,115 @@ final class MessageLabTest extends TestCase
             'requested' => 1000,
             'published' => 1000,
             'requested_consumers' => 1,
-            'processed_baseline' => 100,
+            'ack_baseline' => 100,
+            'error_baseline' => 0,
             'started_at_ms' => (int) (microtime(true) * 1000) - 2000,
         ]);
         $runId = $metrics->stress()['run_id'];
         $this->app->instance(RabbitMqMetrics::class, $metrics);
 
         Http::fake([
-            'http://127.0.0.1:8000/rabbitmq/metrics' => Http::response(
-                'rabbitmq_messages_total{event="processed"} 889' . "\n",
-            ),
-            'http://127.0.0.1:15672/api/queues/*' => Http::response([
-                'messages' => 0,
-                'consumers' => 20,
-            ]),
+            'http://127.0.0.1:15672/api/queues/*' => Http::sequence()
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 20, 'message_stats' => ['ack' => 889]])
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]])
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]]),
         ]);
 
         $this->getJson('/consumer-lab/status?run_id=' . $runId)
             ->assertOk()
             ->assertJsonPath('status', 'incomplete')
+            ->assertJsonPath('measurement', 'queue_ack_v1')
             ->assertJsonPath('published', 1000)
             ->assertJsonPath('processed', 789)
             ->assertJsonPath('difference', 211)
             ->assertJsonPath('requested_consumers', 1)
-            ->assertJsonPath('throughput', 0);
+            ->assertJsonPath('status', 'incomplete');
 
         $this->assertSame('incomplete', $metrics->consumerHistory()[0]['status']);
+        $this->assertGreaterThan(0, $metrics->consumerHistory()[0]['throughput']);
+    }
+
+    public function testConsumerRunDoesNotTreatUnavailableQueueMetricsAsZero(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-unavailable-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveStress([
+            'run_id' => 'unavailable-consumer-run',
+            'status' => 'completed',
+            'requested' => 100,
+            'published' => 100,
+            'ack_baseline' => 0,
+            'error_baseline' => 0,
+            'started_at_ms' => (int) (microtime(true) * 1000) - 1000,
+        ]);
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+        Http::fake(['http://127.0.0.1:15672/api/queues/*' => Http::response([], 503)]);
+
+        $this->getJson('/consumer-lab/status?run_id=unavailable-consumer-run')
+            ->assertOk()
+            ->assertJsonPath('status', 'monitoring_unavailable')
+            ->assertJsonPath('processed', null)
+            ->assertJsonPath('backlog', null);
+
+        $historyRunIds = array_column($metrics->consumerHistory(), 'run_id');
+        $this->assertNotContains('unavailable-consumer-run', $historyRunIds);
+    }
+
+    public function testConsumerRunReportsFailedMessagesSeparately(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-errors-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveStress([
+            'run_id' => 'consumer-errors-run',
+            'status' => 'completed',
+            'requested' => 10,
+            'published' => 10,
+            'ack_baseline' => 20,
+            'error_baseline' => 0,
+            'started_at_ms' => (int) (microtime(true) * 1000) - 1000,
+        ]);
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+        Http::fake([
+            'http://127.0.0.1:15672/api/queues/*' => Http::sequence()
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 2, 'message_stats' => ['ack' => 30]])
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]])
+                ->push(['messages' => 2, 'messages_ready' => 2, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]]),
+        ]);
+
+        $this->getJson('/consumer-lab/status?run_id=consumer-errors-run')
+            ->assertOk()
+            ->assertJsonPath('status', 'completed_with_errors')
+            ->assertJsonPath('processed', 8)
+            ->assertJsonPath('errors', 2)
+            ->assertJsonPath('error_backlog', 2)
+            ->assertJsonPath('difference', 0);
+    }
+
+    public function testConsumerRunWaitsWhileRetriesRemain(): void
+    {
+        $metrics = new RabbitMqMetrics(storage_path('framework/testing/consumer-retries-' . bin2hex(random_bytes(6)) . '.json'));
+        $metrics->saveStress([
+            'run_id' => 'consumer-retry-run',
+            'status' => 'completed',
+            'requested' => 1,
+            'published' => 1,
+            'ack_baseline' => 0,
+            'error_baseline' => 0,
+            'started_at_ms' => (int) (microtime(true) * 1000) - 1000,
+        ]);
+        $this->app->instance(RabbitMqMetrics::class, $metrics);
+        Http::fake([
+            'http://127.0.0.1:15672/api/queues/*' => Http::sequence()
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 1, 'message_stats' => ['ack' => 0]])
+                ->push(['messages' => 1, 'messages_ready' => 1, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]])
+                ->push(['messages' => 0, 'messages_ready' => 0, 'messages_unacknowledged' => 0, 'consumers' => 0, 'message_stats' => ['ack' => 0]]),
+        ]);
+
+        $this->getJson('/consumer-lab/status?run_id=consumer-retry-run')
+            ->assertOk()
+            ->assertJsonPath('status', 'draining')
+            ->assertJsonPath('retry_backlog', 1);
+
+        $historyRunIds = array_column($metrics->consumerHistory(), 'run_id');
+        $this->assertNotContains('consumer-retry-run', $historyRunIds);
     }
 
     public function testConsumerPoolManagerStopsOnlyTheExcessWorkers(): void

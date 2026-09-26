@@ -28,6 +28,12 @@
 <main>
     @include('partials.lab-navigation')
     <header><div class="eyebrow">Mirabel / Production gate</div><h1>Está pronto para produção?</h1><p class="intro">Monte um cenário parecido com o seu pico real e receba uma leitura simples: o que está saudável, o que falta testar e onde a fila pode crescer.</p></header>
+    @include('partials.lab-guide', [
+        'title' => 'Capacidade e critérios de prontidão',
+        'concept' => 'Backlog por segundo = máximo entre zero e (entrada sustentada − capacidade de consumo). Se o resultado for positivo, a fila cresce.',
+        'observe' => 'Compare capacidade, latência p95, falhas, publisher confirms e evidência de failover.',
+        'limit' => 'A pontuação é uma triagem heurística com valores informados, não certificação. Valide as taxas na infraestrutura alvo.',
+    ])
     <div class="layout">
         <section>
             <h2>Cenário</h2>

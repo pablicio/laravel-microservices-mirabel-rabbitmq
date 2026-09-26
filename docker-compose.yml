@@ -1,5 +1,21 @@
-
+# Everything the two services need around them.
+#   docker compose up -d
+# RabbitMQ UI  http://localhost:15672  (guest / guest)
+# Prometheus   http://localhost:9090
+# Grafana      http://localhost:3000   (admin / admin)
 services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: mirabel-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   prometheus:
     image: prom/prometheus:v2.53.1
     container_name: mirabel-prometheus
@@ -8,7 +24,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:11.2.0
@@ -19,4 +35,4 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

@@ -12,3 +12,9 @@ scrape_configs:
     metrics_path: /rabbitmq/metrics
     static_configs:
       - targets: [host.docker.internal:8001]
+
+  # The broker's own per-queue metrics (rabbitmq_prometheus plugin, on by default).
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: [rabbitmq:15692]

@@ -47,22 +47,28 @@
     <header>
         <div>
             <div class="kicker">Mirabel / RabbitMQ</div>
-            <h1>Message lab<br>for real traffic.</h1>
+            <h1>Eventos reais.<br>Da aplicação ao broker.</h1>
         </div>
         <div class="status"><strong>Order service</strong>Publishing through <code>StoreOrderCreatedEvent</code></div>
     </header>
+    @include('partials.lab-guide', [
+        'title' => 'Publicação de eventos',
+        'concept' => 'Um evento representa um fato da aplicação e é publicado em uma exchange para chegar às filas ligadas à sua routing key.',
+        'observe' => 'Publicado significa que o publisher terminou o envio. Não significa que um consumer processou a mensagem.',
+        'limit' => 'O lote é real, mas os contadores Prometheus são cumulativos do serviço; eles não são o resultado exclusivo deste lote.',
+    ])
 
     <div class="workspace">
         <section>
-            <h2>Generate a batch</h2>
-            <p>Each item is published to the configured RabbitMQ exchange with a unique message and idempotency key.</p>
+            <h2>Publicar um lote</h2>
+            <p>Cada evento vai para a exchange configurada com um message ID e uma chave de idempotência próprios.</p>
             <form method="POST" action="{{ url('/test/generate') }}">
                 @csrf
-                <label for="quantity">Messages</label>
+                <label for="quantity">Mensagens</label>
                 <input id="quantity" name="quantity" type="number" min="1" max="500" value="10" required>
-                <label for="delay_ms">Delay between messages (ms)</label>
+                <label for="delay_ms">Intervalo entre envios (ms)</label>
                 <input id="delay_ms" name="delay_ms" type="number" min="0" max="5000" value="100" required>
-                <button type="submit">Generate messages</button>
+                <button type="submit">Publicar eventos</button>
             </form>
             @if ($errors->any())
                 <div class="result">{{ $errors->first() }}</div>
@@ -76,26 +82,26 @@
         </section>
 
         <section>
-            <h2>Observe the run</h2>
-            <p>The same traffic is exposed to Prometheus and can be inspected in the provisioned Grafana dashboard.</p>
+            <h2>Observabilidade</h2>
+            <p>Os contadores do serviço também são expostos ao Prometheus e ao painel Grafana.</p>
             <div class="links">
-                <a href="{{ url('/rabbitmq/metrics') }}">→ Prometheus metrics</a>
-                <a href="http://localhost:3000/d/mirabel-rabbitmq-overview/mirabel-rabbitmq-overview" target="_blank" rel="noreferrer">→ Open Grafana dashboard</a>
-                <a href="http://localhost:9090" target="_blank" rel="noreferrer">→ Open Prometheus</a>
+                <a href="{{ url('/rabbitmq/metrics') }}">→ Métricas Prometheus</a>
+                <a href="http://localhost:3000/d/mirabel-rabbitmq-overview/mirabel-rabbitmq-overview" target="_blank" rel="noreferrer">→ Abrir painel Grafana</a>
+                <a href="http://localhost:9090" target="_blank" rel="noreferrer">→ Abrir Prometheus</a>
             </div>
         </section>
     </div>
 
     <div class="counters">
-        <div class="counter"><span>Published</span><strong id="published-count">{{ $metrics['published'] ?? 0 }}</strong></div>
-        <div class="counter"><span>Processed</span><strong id="processed-count">{{ $metrics['processed'] ?? 0 }}</strong></div>
-        <div class="counter"><span>Failed to publish</span><strong id="failed-count">{{ $metrics['publish_failed'] ?? 0 }}</strong></div>
+        <div class="counter"><span>Publicadas</span><strong id="published-count">{{ $metrics['published'] ?? 0 }}</strong></div>
+        <div class="counter"><span>Processadas</span><strong id="processed-count">{{ $metrics['processed'] ?? 0 }}</strong></div>
+        <div class="counter"><span>Falhas de publicação</span><strong id="failed-count">{{ $metrics['publish_failed'] ?? 0 }}</strong></div>
     </div>
 
     @if (!empty($batch))
         <section class="messages">
-            <h2>Latest batch: <span id="batch-status">{{ $batch['status'] ?? 'unknown' }}</span></h2>
-            <p id="batch-progress">Requested {{ $batch['requested'] ?? 0 }} · Published {{ $batch['published'] ?? 0 }} · Failed {{ $batch['failed'] ?? 0 }}. These are the first messages from the batch.</p>
+            <h2>Último lote: <span id="batch-status">{{ $batch['status'] ?? 'desconhecido' }}</span></h2>
+            <p id="batch-progress">Solicitadas {{ $batch['requested'] ?? 0 }} · Publicadas {{ $batch['published'] ?? 0 }} · Falhas {{ $batch['failed'] ?? 0 }}. Amostra das primeiras mensagens do lote.</p>
             <progress id="batch-progress-bar" max="{{ max(1, $batch['requested'] ?? 1) }}" value="{{ $batch['published'] ?? 0 }}"></progress>
             <div class="message-list" id="message-list">
                 @foreach ($batch['samples'] ?? [] as $sample)
@@ -124,11 +130,12 @@
                         const published = Number(batch.published || 0);
                         const failed = Number(batch.failed || 0);
                         const totals = batch.metrics || {};
-                        status.textContent = batch.status;
+                        const labels = { queued: 'Na fila', running: 'Publicando', completed: 'Concluído' };
+                        status.textContent = labels[batch.status] || batch.status;
                         document.getElementById('published-count').textContent = totals.published || 0;
                         document.getElementById('processed-count').textContent = totals.processed || 0;
                         document.getElementById('failed-count').textContent = totals.publish_failed || 0;
-                        progress.textContent = 'Requested ' + requested + ' · Published ' + published + ' · Failed ' + failed + (batch.status === 'completed' ? ' · Finished.' : ' · Publishing now.');
+                        progress.textContent = 'Solicitadas ' + requested + ' · Publicadas ' + published + ' · Falhas ' + failed + (batch.status === 'completed' ? ' · Lote concluído.' : ' · Publicação em andamento.');
                         progressBar.max = Math.max(1, requested);
                         progressBar.value = published + failed;
                         if (batch.status === 'completed' && Array.isArray(batch.samples)) {

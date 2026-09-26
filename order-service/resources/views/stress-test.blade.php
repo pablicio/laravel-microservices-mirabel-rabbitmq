@@ -49,14 +49,20 @@
 <body>
 <main>
     @include('partials.lab-navigation')
-    <div class="eyebrow">Mirabel / Load boundary</div>
+    <div class="eyebrow">Mirabel / Limite de carga</div>
     <h1>Descubra onde a fila cede.</h1>
     <p class="intro">Uma pancada controlada de mensagens reais para medir o limite do publisher, da conexão e do broker. O teste roda em segundo plano para você acompanhar sem travar a interface.</p>
+    @include('partials.lab-guide', [
+        'title' => 'Carga do publisher',
+        'concept' => 'O teste mede quantos eventos o processo publica por segundo até o broker, além de falhas e memória do PHP.',
+        'observe' => 'Aumente o lote gradualmente. Compare envios confirmados, duração e falhas; a média não é latência p95 nem vazão de consumers.',
+        'limit' => '“Usuários” só distribui IDs no payload. O comando publica sequencialmente em um processo; não simula concorrência real.',
+    ])
 
     <form class="control" method="POST" action="{{ url('/stress-test/start') }}">
         @csrf
         <section><label for="quantity">Mensagens reais</label><input id="quantity" name="quantity" type="number" min="1" max="1000000" value="1000" required><label for="users">Usuários simulados</label><input id="users" name="users" type="number" min="1" max="5000" value="250" required><p class="warning">Máximo protegido: 1.000.000 mensagens por execução. Em cargas grandes, acompanhe RAM, throughput e falhas.</p></section>
-        <button type="submit">Start stress test</button>
+        <button type="submit">Iniciar teste de carga</button>
     </form>
 
     @php
@@ -84,7 +90,7 @@
         <div class="health-report">
             <h3>O que esse resultado significa</h3>
             <p id="health-summary">{{ $stress['health_summary'] ?? 'Execute uma carga para gerar um diagnóstico explicado em linguagem simples.' }}</p>
-            <p>Tempo médio de cada mensagem: <strong id="latency">{{ $stress['latency_ms'] ?? 0 }} ms</strong> · Percentual com problema: <strong id="failure-rate">{{ $stress['failure_rate'] ?? 0 }}%</strong></p>
+            <p>Média agregada de envio por evento (não é p95): <strong id="latency">{{ $stress['latency_ms'] ?? 0 }} ms</strong> · Percentual com problema: <strong id="failure-rate">{{ $stress['failure_rate'] ?? 0 }}%</strong></p>
             <p>Próximo passo recomendado: <strong id="recommendation">{{ $stress['recommendation'] ?? 'Comece com 1.000 mensagens e aumente em etapas.' }}</strong></p>
             <p>A memória mostrada é a usada pelo processo PHP do teste, não toda a memória do computador.</p>
         </div>
@@ -94,7 +100,7 @@
             <h2>Histórico para comparar</h2>
             <p class="intro">Últimos testes concluídos. Compare velocidade, tempo, falhas e memória para saber se uma otimização realmente ajudou.</p>
             <table>
-                <thead><tr><th>Quando</th><th>Mensagens</th><th>Pessoas</th><th>Duração</th><th>Velocidade</th><th>Falhas</th><th>RAM</th><th>Saúde</th></tr></thead>
+                <thead><tr><th>Quando</th><th>Mensagens</th><th>IDs de usuário</th><th>Duração</th><th>Vazão do publisher</th><th>Falhas</th><th>RAM</th><th>Saúde</th></tr></thead>
                 <tbody>
                 @foreach ($history as $run)
                     <tr>

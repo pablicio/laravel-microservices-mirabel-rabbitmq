@@ -47,7 +47,13 @@
     @include('partials.lab-navigation')
     <div class="eyebrow">Mirabel / Black Friday 2026</div>
     <h1>Compre rápido.<br>Reserve certo.</h1>
-    <p class="intro">Um carrinho de teste para um problema real de alta demanda: impedir que duas compras confirmem o mesmo estoque durante o pico da Black Friday.</p>
+    <p class="intro">Uma simulação de alta demanda: veja por que duas compras podem confirmar o mesmo estoque e compare com uma reserva serializada.</p>
+    @include('partials.lab-guide', [
+        'title' => 'Concorrência e overselling',
+        'concept' => 'Overselling acontece quando duas compras leem o mesmo saldo antes de qualquer uma reservar o estoque.',
+        'observe' => 'A comparação mostra duas compras lendo um saldo antigo versus reservas serializadas uma a uma.',
+        'limit' => 'O estoque não muda entre pedidos: a reserva serializada é calculada, não executada. Em produção, ela precisa ser atômica no banco.',
+    ])
 
     <div class="shop">
         <div class="products">
@@ -71,6 +77,7 @@
             <div class="total"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
             <button class="checkout" id="checkout" type="button" disabled>Simular checkout</button>
             <div id="feedback" hidden></div>
+            <div id="comparison" class="feedback" hidden></div>
         </aside>
     </div>
 </main>
@@ -83,6 +90,7 @@
     const cartTotal = document.getElementById('cart-total');
     const checkout = document.getElementById('checkout');
     const feedback = document.getElementById('feedback');
+    const comparison = document.getElementById('comparison');
     const money = function (cents) { return 'R$ ' + (cents / 100).toFixed(2).replace('.', ','); };
 
     function renderCart() {
@@ -127,8 +135,15 @@
             feedback.hidden = false;
             feedback.className = result.status === 'approved' ? 'feedback' : 'feedback warning';
             feedback.textContent = result.status === 'approved'
-                ? 'Reserva aprovada. Total: R$ ' + result.total + '.'
-                : 'Checkout parcial. ' + result.blocked.map(function (item) { return item.name + ': pediu ' + item.requested + ', mas só há ' + item.available + '.'; }).join(' ');
+                ? 'Simulação aceita; o estoque não foi alterado. Total: R$ ' + result.total + '.'
+                : 'Simulação parcial. ' + result.blocked.map(function (item) { return item.name + ': pediu ' + item.requested + ', mas só há ' + item.available + '.'; }).join(' ');
+            comparison.replaceChildren();
+            comparison.hidden = result.contention.length === 0;
+            result.contention.forEach(function (item) {
+                const row = document.createElement('p');
+                row.textContent = item.name + ': dois checkouts de ' + item.quantity_per_checkout + ' unidade(s) sobre saldo ' + item.stock + ' aceitariam ' + item.uncoordinated_total + ' sem reserva (excesso: ' + item.oversold + '). Com reserva serializada, ' + item.atomic_approved_orders + ' pedido(s) são aprovados e restam ' + item.remaining_stock + ' unidade(s).';
+                comparison.append(row);
+            });
         }).finally(function () { checkout.disabled = false; });
     });
 </script>

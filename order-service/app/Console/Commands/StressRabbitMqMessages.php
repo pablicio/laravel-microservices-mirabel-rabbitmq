@@ -13,7 +13,8 @@ class StressRabbitMqMessages extends Command
         {quantity : Number of real messages to publish}
         {--users=100 : Number of simulated users distributed across messages}
         {--consumers=0 : Number of consumer workers requested for this run}
-        {--processed-baseline=0 : Consumer processed counter before this run}
+        {--ack-baseline=0 : Queue acknowledgement count before this run}
+        {--error-baseline=0 : Error queue depth before this run}
         {--run-id= : Stress run identifier}';
 
     protected $description = 'Publish a high-volume RabbitMQ stress test and measure limits';
@@ -24,7 +25,8 @@ class StressRabbitMqMessages extends Command
         $quantity = max(1, (int) $this->argument('quantity'));
         $users = max(1, (int) $this->option('users'));
         $consumers = max(0, (int) $this->option('consumers'));
-        $processedBaseline = max(0, (int) $this->option('processed-baseline'));
+        $ackBaseline = max(0, (int) $this->option('ack-baseline'));
+        $errorBaseline = max(0, (int) $this->option('error-baseline'));
         $runId = (string) ($this->option('run-id') ?: bin2hex(random_bytes(8)));
         $startedAt = microtime(true);
         $published = 0;
@@ -32,7 +34,7 @@ class StressRabbitMqMessages extends Command
         $recordedPublished = 0;
         $recordedFailed = 0;
 
-        $save = function (string $status) use ($metrics, $runId, $quantity, $users, $consumers, $processedBaseline, &$published, &$failed, &$recordedPublished, &$recordedFailed, $startedAt): void {
+        $save = function (string $status) use ($metrics, $runId, $quantity, $users, $consumers, $ackBaseline, $errorBaseline, &$published, &$failed, &$recordedPublished, &$recordedFailed, $startedAt): void {
             $metrics->recordMany('published', $published - $recordedPublished);
             $metrics->recordMany('publish_failed', $failed - $recordedFailed);
             $recordedPublished = $published;
@@ -56,7 +58,8 @@ class StressRabbitMqMessages extends Command
                 'requested' => $quantity,
                 'users' => $users,
                 'requested_consumers' => $consumers,
-                'processed_baseline' => $processedBaseline,
+                'ack_baseline' => $ackBaseline,
+                'error_baseline' => $errorBaseline,
                 'started_at_ms' => (int) round($startedAt * 1000),
                 'published' => $published,
                 'failed' => $failed,
