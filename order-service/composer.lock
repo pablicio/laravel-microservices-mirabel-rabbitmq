@@ -1898,20 +1898,47 @@
             "dist": {
                 "type": "path",
                 "url": "../../mirabel-rabbitmq",
-                "reference": "e0c5536ee3b264591d7307911221bd754a28c4a7"
+                "reference": "0f1d8dda112481552da276115ca55c565041beb1"
             },
             "require": {
+                "ext-json": "*",
                 "php": ">=8.2",
-                "php-amqplib/php-amqplib": "^3.7"
+                "php-amqplib/php-amqplib": "^3.7",
+                "psr/log": "^3.0"
             },
             "require-dev": {
                 "phpunit/phpunit": "^11.0"
             },
-            "type": "package",
+            "suggest": {
+                "ext-pcntl": "Graceful shutdown of workers on SIGTERM/SIGINT (Linux/macOS).",
+                "laravel/framework": "Optional bridge: config, environment export that survives config:cache, php artisan mirabel:work."
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Mirabel\\RabbitMQ\\Laravel\\MirabelServiceProvider"
+                    ]
+                }
+            },
             "autoload": {
                 "psr-4": {
                     "Mirabel\\RabbitMQ\\": "src/"
                 }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Mirabel\\RabbitMQ\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "phpunit --testsuite unit"
+                ],
+                "test:integration": [
+                    "@putenv MIRABEL_RABBITMQ_INTEGRATION=1",
+                    "phpunit"
+                ]
             },
             "license": [
                 "GPL-3.0-or-later"
@@ -1922,7 +1949,17 @@
                     "email": "pabliciotjg@gmail.com"
                 }
             ],
-            "description": "A small, framework-agnostic RabbitMQ library for PHP.",
+            "description": "A small, framework-agnostic RabbitMQ library for PHP: declarative events and workers with retry, error queues, publisher confirms and an outbox.",
+            "keywords": [
+                "amqp",
+                "dead-letter",
+                "messaging",
+                "outbox",
+                "queue",
+                "rabbitmq",
+                "retry",
+                "worker"
+            ],
             "transport-options": {
                 "symlink": true,
                 "relative": true
