@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Support\MirabelEnvironment;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +23,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        MirabelEnvironment::export(config('mirabel_rabbitmq.environment', []));
+        //
     }
 }

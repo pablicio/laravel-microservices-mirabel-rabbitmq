@@ -42,13 +42,21 @@ por um repositório Composer do tipo `path` com symlink: uma mudança na
 biblioteca vale na hora. Depois de mudar o `composer.json` da biblioteca, rode
 `composer update mirabel/rabbitmq` em cada serviço.
 
+Crie as filas antes de publicar qualquer coisa — sem fila, o broker descarta o
+evento:
+
+```bash
+cd store-service && php artisan mirabel:declare
+cd order-service && php artisan mirabel:declare
+```
+
 Em quatro terminais:
 
 ```bash
 cd store-service && php artisan serve --port=8000
 cd order-service && php artisan serve --port=8001
-cd store-service && php artisan rabbitmq:consume StoreOrderCreatedWorker
-cd order-service && php artisan rabbitmq:consume StoreOrderReceivedWorker
+cd store-service && php artisan mirabel:work StoreOrderCreatedWorker
+cd order-service && php artisan mirabel:work StoreOrderReceivedWorker
 ```
 
 Publique um pedido:
@@ -72,10 +80,12 @@ parar na `.error` com os headers `x-mirabel-*` explicando o motivo.
 
 ## Configuração
 
-As variáveis `MB_RABBITMQ_*` do `.env` vão para `config/mirabel_rabbitmq.php` e
-são exportadas para o ambiente do processo no boot (`App\Support\MirabelEnvironment`),
-que é onde a biblioteca as lê. Isso mantém tudo funcionando depois de
-`php artisan config:cache`, quando o Laravel deixa de carregar o `.env`.
+As variáveis `MB_RABBITMQ_*` ficam só no `.env`. A ponte Laravel da biblioteca,
+registrada pelo *package discovery*, guarda os valores em `config('mirabel')` e
+os exporta para o ambiente do processo no boot, que é onde a biblioteca os lê.
+Isso mantém tudo funcionando depois de `php artisan config:cache`, quando o
+Laravel deixa de carregar o `.env`. A mesma ponte registra o
+`php artisan mirabel:work` e liga o log da biblioteca ao log do Laravel.
 
 | Variável | Padrão | Uso |
 | --- | --- | --- |
@@ -129,11 +139,11 @@ order-service/
   app/Workers/              StoreOrderReceivedWorker
   app/Http/Controllers/     um controller por laboratório
   app/Support/              métricas, pool de consumidores, launcher, clientes HTTP
-  app/Console/Commands/     rabbitmq:generate, rabbitmq:stress, rabbitmq:consume
+  app/Console/Commands/     rabbitmq:generate, rabbitmq:stress
 store-service/
   app/Events/               OrderReceivedEvent
   app/Workers/              StoreOrderCreatedWorker, TestOrderDoneWorker
-  app/Console/Commands/     rabbitmq:consume-store-orders, rabbitmq:consume
+  app/Console/Commands/     rabbitmq:consume-store-orders
 ```
 
 ![Fluxo original do artigo](https://user-images.githubusercontent.com/19760320/233184662-e45add33-8107-45f2-908f-2d8bf3a5416a.png)

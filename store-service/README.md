@@ -5,6 +5,6 @@ Publica `OrderReceivedEvent` e consome `StoreOrderCreatedWorker` e
 
 ```bash
 php artisan serve --port=8000
-php artisan rabbitmq:consume StoreOrderCreatedWorker
+php artisan mirabel:work StoreOrderCreatedWorker
 php vendor/bin/phpunit
 ```

@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Support\ArtisanLauncher;
-use App\Support\MirabelEnvironment;
 use App\Support\RabbitMqManagement;
 use App\Support\StoreServiceClient;
 use Illuminate\Support\ServiceProvider;
@@ -29,15 +28,5 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(StoreServiceClient::class, fn ($app) => new StoreServiceClient(
             $app['config']['services.store.url'],
         ));
-    }
-
-    /**
-     * Bootstrap any application services.
-     *
-     * @return void
-     */
-    public function boot()
-    {
-        MirabelEnvironment::export(config('mirabel_rabbitmq.environment', []));
     }
 }
