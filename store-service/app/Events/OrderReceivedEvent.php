@@ -6,5 +6,5 @@ use Mirabel\RabbitMQ\Event;
 
 class OrderReceivedEvent extends Event
 {
-  public static string $routingKey = 'order-services.order.received';
+  const ROUTING_KEY = 'order-services.order.received';
 }

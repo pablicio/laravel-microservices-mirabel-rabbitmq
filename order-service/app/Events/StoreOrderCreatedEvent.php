@@ -6,5 +6,5 @@ use Mirabel\RabbitMQ\Event;
 
 class StoreOrderCreatedEvent extends Event
 {
-  public static string $routingKey = 'store-services.order.created';
+  const ROUTING_KEY = 'store-services.order.created';
 }
