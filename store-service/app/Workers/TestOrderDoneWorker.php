@@ -2,7 +2,9 @@
 
 namespace App\Workers;
 
+use App\Events\OrderReceivedEvent;
 use Illuminate\Support\Facades\Log;
+use Mirabel\RabbitMQ\Envelope;
 use Mirabel\RabbitMQ\Worker;
 
 /**
@@ -12,14 +14,13 @@ use Mirabel\RabbitMQ\Worker;
 class TestOrderDoneWorker extends Worker
 {
     const QUEUE = 'order-services.order-test.done',
-        routing_keys = ['test-service.order.done', 'order-services.order.received'],
-        options = ['exchange_type' => 'topic'],
-        retry_options = ['x-message-ttl' => 1000, 'max-attempts' => 8];
+        EVENTS = [OrderReceivedEvent::class],
+        ROUTING_KEYS = ['test-service.order.done'],
+        ATTEMPTS = 8,
+        RETRY_DELAY = 1_000;
 
-    public function work($msg)
+    public function handle(Envelope $envelope): void
     {
-        Log::info('Order test done.', ['body' => $msg->getBody(), 'type' => $msg->get('type')]);
-
-        return $this->ack($msg);
+        Log::info('Order test done.', ['body' => $envelope->body, 'type' => $envelope->type]);
     }
 }

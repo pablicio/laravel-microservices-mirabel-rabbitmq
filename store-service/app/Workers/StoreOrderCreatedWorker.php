@@ -3,6 +3,7 @@
 namespace App\Workers;
 
 use App\Support\RabbitMqMetrics;
+use Mirabel\RabbitMQ\Envelope;
 use Mirabel\RabbitMQ\Worker;
 
 /**
@@ -12,20 +13,18 @@ use Mirabel\RabbitMQ\Worker;
 class StoreOrderCreatedWorker extends Worker
 {
     const QUEUE = 'store-services.orders.created',
-        routing_keys = ['store-services.order.created'],
-        options = ['exchange_type' => 'topic'],
-        retry_options = ['x-message-ttl' => 3600, 'max-attempts' => 4];
+        ROUTING_KEYS = ['store-services.order.created'],
+        ATTEMPTS = 4,
+        RETRY_DELAY = 3_600;
 
-    public function work($msg)
+    public function handle(Envelope $envelope): void
     {
         try {
             app(RabbitMqMetrics::class)->record('processed');
-
-            return $this->ack($msg);
         } catch (\Throwable $exception) {
             app(RabbitMqMetrics::class)->record('message_retried');
 
-            return $this->nack($msg);
+            throw $exception;
         }
     }
 }
